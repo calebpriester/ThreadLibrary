@@ -1,0 +1,82 @@
+Name:  Caleb Priester
+Class: CPSC3220 Sect. 2
+Asg:   Project 2
+Date:  10 March 2015
+
+KNOWN PROBLEMS:
+   My program has almost no means of error checking.  If all threads are 
+blocked or joined, then it will be stuck in an infinite loop.  There is no lock
+ownership, so if thread A locks lock 1, thread B can still unlock it, which 
+could result in problems.  Other than that, all functionality is correct and
+every method is either strictly for internal use or it disables interrupts at
+the start and enables them at the end.  This means that everything is also 
+preemptible.
+
+DESIGN:
+   For this project, I made a data structure called a "thread_t" that contains 
+all necessary data involving threads.  Each thread_t has an id, a stack, a 
+context, and indicators as to whether the thread is joined, locked, or blocked
+on a condition variable.  Each created thread is represented by a thread_t data
+structure, including the main thread.
+
+   In order to keep track of active threads and most efficiently schedule them,
+I created a linked list structure with both a head and tail.  Each node in the
+linked list contains a thread_t and a next node pointer.  I also use a linked 
+list in order to store completed threads.  There is an indicator that lets 
+active threads know whether or not a stack needs to be freed in a completed 
+thread.  I chose a linked list structure for two reasons.  Firstly, a linked
+list is dynamic in size, as a new node can be created and added when necessary,
+and freed when no longer needed.  I also chose a linked list because I wanted
+to implement a round robin scheduling algorithm, and a linked list with a head
+and tail made this easy.  The running thread is always at the head of the 
+linked list, and when I want to schedule a new thread to run, I move the node 
+at the head of the list to the tail and check to see if the new head is joined 
+or blocked.  If it is, I move it to the back and check the next one. 
+Otherwise, the new head gets executed.  A tail is needed in the active threads 
+linked list in order to quickly place the old head at the end of the list, but
+this is unnecessary in the completed threads list, thus that list only has a 
+head pointer (doneHead).  The linked list data structure was a key component of
+how I was able to dynamically store threads and properly schedule them for 
+execution using a round robin scheduling algorithm.
+
+   When a new thread is created, instead of using the standard round robin 
+scheduling algorithm, the new thread is immediately placed at the front of the
+linked list and executed.  The thread that created the new thread is not sent
+to the back of the line, as it did not invoke a typical method for yielding
+the processor.  This is the only place where the typical round robin
+scheduling algorithm is not in place.
+
+   In order to keep track of locks, I use a simple int array of size NUM_LOCKS.
+All values in this array are initialized to 0 (indicating that they are 
+unlocked), and will change to 1 if any thread decides to lock them.  Each 
+thread has a value to state which lock it is locked on, and the scheduler uses
+this in scheduling.
+
+   I found no need for a data structure to keep track of condition variables,
+since more than one thread can be blocked on the same condition variable.  
+Each thread has a value to state which condition variable that they are 
+blocked on.
+
+   In order to allow preemption, I made every function that an outside user can
+invoke disable interrupts at the beginning of the function and reenable them 
+at the end.  Any time a context switch happens in the thread library, the new
+context will always be in a library function that expects that also diabled 
+interrupts at the beginning and reenables them at the end.  This means that
+interrupts are never double enabled or disabled, and all of my library 
+functions can occur uninterrupted.
+
+   In order to properly handle memory, two techniques were employed.  Firstly,
+there is a method called "cleanUp" that only functions to free the stack of the
+most recently exited thread stored at doneHead.  Whenever a thread exits, it 
+marks a variable called "cleanUpNeeded" as 1 and then switches contexts.  All 
+places where the context can jump to have a check to see if cleanUpNeeded is 1,
+and if it is, then it invokes cleanUp and marks the variable as 0.  This 
+ensures that all unused stacks are freed.  Finally, all memory must be freed 
+on exit of the program, and this is handled by means of a deconstructor.  When
+the deconstructor is invoked, it first frees the array holding the locks.  
+Then, it traverses through the active threads linked list and frees all stacks,
+results, and the threads and nodes themselves.  Then, it traverses the
+completed threads linked list and frees their results, threads, and nodes (the
+stacks have already been freed).  These techniques help reduce the risk of 
+overflow and ensure that all necessary memory is freed at the end of the 
+program.
